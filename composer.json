@@ -1,0 +1,52 @@
+{
+    "name": "codenzia/filament-workflow",
+    "description": "Visual workflow automation engine for Filament 4+ built on filament-diagrammer",
+    "keywords": ["filament", "workflow", "automation", "laravel", "diagrammer"],
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Codenzia",
+            "email": "dev@codenzia.com"
+        }
+    ],
+    "repositories": [
+        {
+            "type": "path",
+            "url": "../filament-diagrammer"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "filament/filament": "^4.0",
+        "codenzia/filament-diagrammer": "dev-main"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^10.0",
+        "pestphp/pest": "^3.0",
+        "laravel/pint": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Codenzia\\FilamentWorkflow\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Codenzia\\FilamentWorkflow\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Codenzia\\FilamentWorkflow\\FilamentWorkflowServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}
