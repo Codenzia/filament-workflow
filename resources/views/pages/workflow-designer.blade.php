@@ -74,8 +74,7 @@
                                     @endif
                                 </button>
                                 <button
-                                    wire:click.stop="deleteWorkflow({{ $workflow['id'] }})"
-                                    wire:confirm="Are you sure you want to delete this workflow?"
+                                    wire:click.stop="mountAction('deleteWorkflow', { id: {{ $workflow['id'] }} })"
                                     class="rounded p-1 text-gray-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 dark:hover:text-red-400"
                                     title="Delete"
                                 >
@@ -95,9 +94,36 @@
         </div>
 
         {{-- Main Content Area --}}
-        <div class="flex min-w-0 flex-1 flex-col gap-4">
-            {{-- Diagram Canvas --}}
-            <div>
+        <div class="flex min-w-0 flex-1 flex-col gap-4" x-data="{ tab: @entangle('activeTab') }">
+
+            {{-- Tab Bar --}}
+            @if ($selectedWorkflowId)
+                <div class="wf-tab-bar flex items-center gap-0 border-b border-gray-200 dark:border-gray-700">
+                    <button
+                        type="button"
+                        @click="tab = 'diagram'; $wire.switchToTab('diagram')"
+                        :class="tab === 'diagram'
+                            ? 'wf-tab wf-tab--active'
+                            : 'wf-tab'"
+                    >
+                        <x-filament::icon icon="heroicon-o-squares-2x2" class="h-4 w-4" />
+                        <span>{{ __('filament-workflow::rules.tab-diagram') }}</span>
+                    </button>
+                    <button
+                        type="button"
+                        @click="tab = 'rules'; $wire.switchToTab('rules')"
+                        :class="tab === 'rules'
+                            ? 'wf-tab wf-tab--active'
+                            : 'wf-tab'"
+                    >
+                        <x-filament::icon icon="heroicon-o-list-bullet" class="h-4 w-4" />
+                        <span>{{ __('filament-workflow::rules.tab-rules') }}</span>
+                    </button>
+                </div>
+            @endif
+
+            {{-- Diagram View --}}
+            <div x-show="tab === 'diagram'" x-cloak>
                 @if ($selectedWorkflowId)
                     @include('filament-diagrammer::filament.components.diagram-canvas')
                 @else
@@ -110,6 +136,13 @@
                             </p>
                         </div>
                     </div>
+                @endif
+            </div>
+
+            {{-- Rules View --}}
+            <div x-show="tab === 'rules'" x-cloak>
+                @if ($selectedWorkflowId)
+                    @include('filament-workflow::pages.partials.rules-view')
                 @endif
             </div>
 

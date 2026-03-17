@@ -108,6 +108,25 @@ WorkflowEngine::registerModelFields(Task::class, [
 
 The `modelType` parameter is **required** — the designer will abort if not provided.
 
+### Diagram & Rules Tabs
+
+The designer includes two tabs above the canvas:
+
+- **Diagram** — Visual drag-and-drop canvas (default)
+- **Rules** — Structured form-based step list
+
+Both tabs edit the same underlying data. Changes made in one tab are immediately visible when switching to the other.
+
+The **Rules tab** shows:
+- Connected flows as a vertical step list with condition branching (Yes/No columns)
+- Inline `+` buttons between steps to insert new nodes
+- An "Add Step" button for creating new trigger/action/condition/delay steps
+- An **Unconnected Steps** section (collapsed by default) for orphaned nodes
+
+Double-click any step card to open its settings editor.
+
+When switching from Rules back to Diagram, nodes created in the rules view are automatically positioned using a layered tree layout algorithm.
+
 ## Configuration
 
 Published to `config/filament-workflow.php`:
@@ -331,6 +350,11 @@ The `WorkflowDesigner` is designed for subclassing. Override these methods to cu
 | `mapCreateData(array $data)` | Transform create form data → DB attributes |
 | `mapEditData(array $data)` | Transform edit form data → DB attributes |
 | `fillEditForm(Workflow $workflow)` | Populate edit form from model |
+| `getRulesTree()` | Customize the rules view tree structure |
+| `getStepSummary(WorkflowNode $node)` | Customize step card descriptions |
+| `onRulesStepDoubleClick(int $nodeId)` | Customize double-click behavior on rules steps |
+| `addStepAction()` | Customize the "Add Step" modal form |
+| `computeAutoLayout()` | Customize auto-positioning algorithm |
 
 Example — embedding a subclass:
 

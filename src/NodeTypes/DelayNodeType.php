@@ -57,6 +57,7 @@ class DelayNodeType extends BaseNodeType
             Select::make('unit')
                 ->label('Unit')
                 ->options([
+                    'seconds' => 'Seconds',
                     'minutes' => 'Minutes',
                     'hours' => 'Hours',
                     'days' => 'Days',

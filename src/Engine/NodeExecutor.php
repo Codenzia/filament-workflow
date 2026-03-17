@@ -96,6 +96,7 @@ class NodeExecutor
         $unit = $node->getConfigValue('unit', 'minutes');
 
         $delaySeconds = match ($unit) {
+            'seconds' => $duration,
             'hours' => $duration * 3600,
             'days' => $duration * 86400,
             default => $duration * 60, // minutes

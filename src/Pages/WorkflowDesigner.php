@@ -17,6 +17,7 @@ use Codenzia\FilamentDiagrammer\Components\DiagramCanvas;
 use Codenzia\FilamentDiagrammer\Components\DiagramConnection;
 use Codenzia\FilamentDiagrammer\Components\DiagramNode;
 use Codenzia\FilamentDiagrammer\Concerns\HasDiagram;
+use Codenzia\FilamentWorkflow\Concerns\HasRulesView;
 use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
 use Codenzia\FilamentWorkflow\Enums\NodeTypeEnum;
 use Codenzia\FilamentWorkflow\Enums\WorkflowStatusEnum;
@@ -39,6 +40,7 @@ use Illuminate\Support\Facades\Artisan;
 class WorkflowDesigner extends Page
 {
     use HasDiagram;
+    use HasRulesView;
 
     protected string $view = 'filament-workflow::pages.workflow-designer';
 
@@ -538,6 +540,19 @@ class WorkflowDesigner extends Page
             ->title("Workflow {$newStatus->label()}")
             ->success()
             ->send();
+    }
+
+    public function deleteWorkflowAction(): Action
+    {
+        return Action::make('deleteWorkflow')
+            ->label('Delete Workflow')
+            ->icon('heroicon-o-trash')
+            ->color('danger')
+            ->requiresConfirmation()
+            ->modalDescription('This will permanently delete the workflow and all its steps. This cannot be undone.')
+            ->action(function (array $arguments): void {
+                $this->deleteWorkflow($arguments['id']);
+            });
     }
 
     public function deleteWorkflow(int $workflowId): void
