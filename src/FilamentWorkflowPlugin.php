@@ -12,8 +12,10 @@ declare(strict_types=1);
 
 namespace Codenzia\FilamentWorkflow;
 
+use Codenzia\FilamentWorkflow\Pages\WorkflowDesigner;
 use Filament\Contracts\Plugin;
 use Filament\Panel;
+use Livewire\Livewire;
 
 class FilamentWorkflowPlugin implements Plugin
 {
@@ -34,6 +36,6 @@ class FilamentWorkflowPlugin implements Plugin
 
     public function boot(Panel $panel): void
     {
-        //
+        Livewire::component('codenzia.filament-workflow.pages.workflow-designer', WorkflowDesigner::class);
     }
 }

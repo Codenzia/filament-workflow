@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Codenzia\FilamentWorkflow\Actions;
 
 use Codenzia\FilamentWorkflow\Engine\Contracts\ActionHandlerInterface;
+use Filament\Forms\Components\TextInput;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Notification;
 
@@ -52,6 +53,24 @@ class SendNotificationAction implements ActionHandlerInterface
             'action' => 'send_notification',
             'user_id' => $userId,
             'notification_class' => $notificationClass,
+        ];
+    }
+
+    public static function configSchema(): array
+    {
+        return [
+            TextInput::make('config.user_field')
+                ->label('User Field')
+                ->placeholder('e.g., assigned_to_user_id')
+                ->helperText('Model field containing the user ID to notify'),
+            TextInput::make('config.user_id')
+                ->label('Or Specific User ID')
+                ->numeric(),
+            TextInput::make('config.notification_class')
+                ->label('Notification Class (FQCN)')
+                ->placeholder('App\\Notifications\\...'),
+            TextInput::make('config.message')
+                ->label('Fallback Message'),
         ];
     }
 }

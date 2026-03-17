@@ -18,4 +18,9 @@ class ModelCreatedTrigger implements TriggerInterface
     {
         return ($context['event'] ?? null) === 'created';
     }
+
+    public static function configSchema(): array
+    {
+        return [];
+    }
 }

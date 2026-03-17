@@ -37,6 +37,12 @@ class WorkflowEngine
      */
     protected static array $actions = [];
 
+    /**
+     * Registered model field options: model class => [field_name => label, ...]
+     * Used by condition nodes, triggers, and actions to show field dropdowns.
+     */
+    protected static array $modelFields = [];
+
     protected NodeExecutor $nodeExecutor;
 
     public function __construct()
@@ -67,12 +73,45 @@ class WorkflowEngine
     }
 
     /**
+     * Register available model fields for use in condition/trigger/action config dropdowns.
+     *
+     * @param  string  $modelClass  e.g., 'App\Models\Task'
+     * @param  array<string, string>  $fields  e.g., ['status' => 'Status', 'priority' => 'Priority']
+     */
+    public static function registerModelFields(string $modelClass, array $fields): void
+    {
+        static::$modelFields[$modelClass] = $fields;
+    }
+
+    /**
+     * Get registered fields for a model class, or all fields if no class specified.
+     * Returns a flat [field_name => label] array merged across all registered models.
+     *
+     * @return array<string, string>
+     */
+    public static function getModelFields(?string $modelClass = null): array
+    {
+        if ($modelClass && isset(static::$modelFields[$modelClass])) {
+            return static::$modelFields[$modelClass];
+        }
+
+        // Merge all registered model fields
+        $merged = [];
+        foreach (static::$modelFields as $fields) {
+            $merged = array_merge($merged, $fields);
+        }
+
+        return $merged;
+    }
+
+    /**
      * Clear all registered triggers and actions (useful for testing).
      */
     public static function clearRegistrations(): void
     {
         static::$triggers = [];
         static::$actions = [];
+        static::$modelFields = [];
     }
 
     // ─── Execution ──────────────────────────────────────────────────

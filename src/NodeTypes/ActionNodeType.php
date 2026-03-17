@@ -24,6 +24,11 @@ class ActionNodeType extends BaseNodeType
         return 'Action';
     }
 
+    public static function description(): ?string
+    {
+        return __('filament-workflow::node-types.action.description');
+    }
+
     public static function icon(): ?string
     {
         return 'heroicon-o-play';
@@ -47,13 +52,24 @@ class ActionNodeType extends BaseNodeType
             $options[$key] = $class::label();
         }
 
-        return [
+        $schema = [
             Select::make('type_config')
                 ->label('Action Type')
                 ->options($options)
                 ->required()
                 ->live(),
         ];
+
+        // Add dynamic config fields from each registered action.
+        // Use ->hidden() for action-type gating so it doesn't overwrite
+        // any ->visible() the field already has for its own show/hide logic.
+        foreach ($actions as $key => $class) {
+            foreach ($class::configSchema() as $field) {
+                $schema[] = $field->hidden(fn (callable $get) => $get('type_config') !== $key);
+            }
+        }
+
+        return $schema;
     }
 
     public static function allowedInputTypes(): array

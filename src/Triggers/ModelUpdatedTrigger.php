@@ -18,4 +18,9 @@ class ModelUpdatedTrigger implements TriggerInterface
     {
         return ($context['event'] ?? null) === 'updated';
     }
+
+    public static function configSchema(): array
+    {
+        return [];
+    }
 }

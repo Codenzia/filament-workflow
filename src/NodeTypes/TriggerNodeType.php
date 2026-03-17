@@ -24,6 +24,11 @@ class TriggerNodeType extends BaseNodeType
         return 'Trigger';
     }
 
+    public static function description(): ?string
+    {
+        return __('filament-workflow::node-types.trigger.description');
+    }
+
     public static function icon(): ?string
     {
         return 'heroicon-o-bolt';
@@ -39,6 +44,11 @@ class TriggerNodeType extends BaseNodeType
         return NodeShape::DIAMOND;
     }
 
+    public static function defaultWidth(): ?float
+    {
+        return 180;
+    }
+
     public static function editFormSchema(): array
     {
         $triggers = WorkflowEngine::getTriggers();
@@ -47,13 +57,23 @@ class TriggerNodeType extends BaseNodeType
             $options[$key] = $class::label();
         }
 
-        return [
+        $schema = [
             Select::make('type_config')
                 ->label('Trigger Type')
                 ->options($options)
                 ->required()
                 ->live(),
         ];
+
+        // Use ->hidden() for trigger-type gating so it doesn't overwrite
+        // any ->visible() the field already has for its own show/hide logic.
+        foreach ($triggers as $key => $class) {
+            foreach ($class::configSchema() as $field) {
+                $schema[] = $field->hidden(fn (callable $get) => $get('type_config') !== $key);
+            }
+        }
+
+        return $schema;
     }
 
     public static function allowedOutputTypes(): array

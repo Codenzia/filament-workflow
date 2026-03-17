@@ -14,7 +14,11 @@ namespace Codenzia\FilamentWorkflow;
 
 use Codenzia\FilamentWorkflow\Commands\ProcessTimeTriggersCommand;
 use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
+use Codenzia\FilamentWorkflow\Pages\WorkflowDesigner;
+use Filament\Support\Assets\Css;
+use Filament\Support\Facades\FilamentAsset;
 use Illuminate\Support\ServiceProvider;
+use Livewire\Livewire;
 
 class FilamentWorkflowServiceProvider extends ServiceProvider
 {
@@ -31,6 +35,13 @@ class FilamentWorkflowServiceProvider extends ServiceProvider
     {
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'filament-workflow');
+        $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'filament-workflow');
+
+        Livewire::component('codenzia.filament-workflow.pages.workflow-designer', WorkflowDesigner::class);
+
+        FilamentAsset::register([
+            Css::make('filament-workflow', __DIR__.'/../resources/assets/css/filament-workflow.css'),
+        ], package: 'codenzia/filament-workflow');
 
         if ($this->app->runningInConsole()) {
             $this->publishes([

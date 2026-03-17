@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Codenzia\FilamentWorkflow\Actions;
 
 use Codenzia\FilamentWorkflow\Engine\Contracts\ActionHandlerInterface;
+use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Illuminate\Database\Eloquent\Model;
 
 class ChangeFieldAction implements ActionHandlerInterface
@@ -38,6 +41,20 @@ class ChangeFieldAction implements ActionHandlerInterface
             'field' => $field,
             'from' => $oldValue,
             'to' => $value,
+        ];
+    }
+
+    public static function configSchema(): array
+    {
+        return [
+            Select::make('config.field')
+                ->label('Field')
+                ->options(fn () => WorkflowEngine::getModelFields())
+                ->searchable()
+                ->required(),
+            TextInput::make('config.value')
+                ->label('New Value')
+                ->required(),
         ];
     }
 }

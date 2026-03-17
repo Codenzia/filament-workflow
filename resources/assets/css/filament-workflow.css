@@ -1,0 +1,69 @@
+/**
+ * Filament Workflow - Styles
+ *
+ * Dark mode uses vanilla .dark selectors for reliable theming
+ * in Filament v4 with CSS layers.
+ *
+ * @package codenzia/filament-workflow
+ * @author Codenzia
+ */
+
+/* ─── Workflow Card (sidebar) ────────────────────────────────────── */
+.workflow-card {
+    background: #ffffff;
+    border-color: transparent;
+}
+
+.workflow-card:hover {
+    border-color: #e5e7eb;
+}
+
+.dark .workflow-card {
+    background: #1f2937;
+    border-color: transparent;
+}
+
+.dark .workflow-card:hover {
+    border-color: #4b5563;
+}
+
+.workflow-card.workflow-card--selected {
+    background: #eff6ff;
+    border-color: var(--primary-500, #f59e0b);
+}
+
+.dark .workflow-card.workflow-card--selected {
+    background: rgba(var(--primary-950), 0.3);
+    border-color: var(--primary-500, #f59e0b);
+}
+
+/* ─── Status Badges ──────────────────────────────────────────────── */
+.workflow-status-badge--active {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.dark .workflow-status-badge--active {
+    background: rgba(22, 101, 52, 0.4);
+    color: #4ade80;
+}
+
+.workflow-status-badge--draft {
+    background: #f3f4f6;
+    color: #4b5563;
+}
+
+.dark .workflow-status-badge--draft {
+    background: #374151;
+    color: #9ca3af;
+}
+
+.workflow-status-badge--inactive {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+.dark .workflow-status-badge--inactive {
+    background: rgba(127, 29, 29, 0.4);
+    color: #f87171;
+}

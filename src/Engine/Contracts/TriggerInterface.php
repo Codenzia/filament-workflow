@@ -31,4 +31,12 @@ interface TriggerInterface
      * @param  array  $context  Event context (e.g., ['from' => 'active', 'to' => 'closed'])
      */
     public function matches(Model $model, array $config, array $context): bool;
+
+    /**
+     * Filament form schema for configuring this trigger's parameters.
+     * Return an empty array if no configuration is needed.
+     *
+     * @return array<\Filament\Forms\Components\Component>
+     */
+    public static function configSchema(): array;
 }

@@ -32,4 +32,12 @@ interface ActionHandlerInterface
      * @return array  Execution details for logging (what changed, etc.)
      */
     public function execute(Model $model, array $config, array $context): array;
+
+    /**
+     * Filament form schema for configuring this action's parameters.
+     * Return an empty array if no configuration is needed.
+     *
+     * @return array<\Filament\Forms\Components\Component>
+     */
+    public static function configSchema(): array;
 }

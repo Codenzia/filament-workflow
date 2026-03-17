@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Codenzia\FilamentWorkflow\Triggers;
 
 use Codenzia\FilamentWorkflow\Engine\Contracts\TriggerInterface;
+use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\TextInput;
 use Illuminate\Database\Eloquent\Model;
 
 class FieldChangedTrigger implements TriggerInterface
@@ -51,5 +54,22 @@ class FieldChangedTrigger implements TriggerInterface
         }
 
         return true;
+    }
+
+    public static function configSchema(): array
+    {
+        return [
+            Select::make('config.field')
+                ->label('Field')
+                ->options(fn () => WorkflowEngine::getModelFields())
+                ->searchable()
+                ->required(),
+            TextInput::make('config.from')
+                ->label('From Value (optional)')
+                ->placeholder('Any'),
+            TextInput::make('config.to')
+                ->label('To Value (optional)')
+                ->placeholder('Any'),
+        ];
     }
 }

@@ -14,6 +14,7 @@ namespace Codenzia\FilamentWorkflow\NodeTypes;
 
 use Codenzia\FilamentDiagrammer\Enums\NodeShape;
 use Codenzia\FilamentDiagrammer\NodeTypes\BaseNodeType;
+use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
 use Codenzia\FilamentWorkflow\Enums\ConditionOperatorEnum;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -24,6 +25,11 @@ class ConditionNodeType extends BaseNodeType
     public static function label(): string
     {
         return 'Condition';
+    }
+
+    public static function description(): ?string
+    {
+        return __('filament-workflow::node-types.condition.description');
     }
 
     public static function icon(): ?string
@@ -39,6 +45,11 @@ class ConditionNodeType extends BaseNodeType
     public static function defaultShape(): NodeShape
     {
         return NodeShape::DIAMOND;
+    }
+
+    public static function defaultWidth(): ?float
+    {
+        return 180;
     }
 
     public static function outputPorts(): array
@@ -63,9 +74,10 @@ class ConditionNodeType extends BaseNodeType
             Repeater::make('conditions')
                 ->label('Conditions')
                 ->schema([
-                    TextInput::make('field')
+                    Select::make('field')
                         ->label('Field')
-                        ->placeholder('e.g., status, priority')
+                        ->options(fn () => WorkflowEngine::getModelFields() ?: ['status' => 'status', 'priority' => 'priority'])
+                        ->searchable()
                         ->required(),
 
                     Select::make('operator')
@@ -82,7 +94,7 @@ class ConditionNodeType extends BaseNodeType
                         ->placeholder('Expected value'),
                 ])
                 ->columns(3)
-                ->defaultItems(1)
+                ->defaultItems(0)
                 ->addActionLabel('Add Condition'),
         ];
     }

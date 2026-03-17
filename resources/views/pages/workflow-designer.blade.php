@@ -15,35 +15,34 @@
         $canvasHeight = $canvasConfig['height'] ?? 'calc(100vh - 200px)';
     @endphp
 
-    <div class="flex gap-4" style="height: {{ $canvasHeight }};">
+    <div class="flex gap-4">
         {{-- Workflow List Sidebar --}}
-        <div class="w-72 shrink-0 space-y-3">
-            <div class="flex items-center justify-between">
-                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">Workflows</h3>
+        <div class="w-64 shrink-0 space-y-3">
+            <div class="flex items-center justify-between px-1">
+                <h3 class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Workflows</h3>
                 {{ $this->createWorkflowAction }}
             </div>
 
-            <div class="space-y-2 overflow-y-auto" style="max-height: calc({{ $canvasHeight }} - 60px);">
+            <div class="space-y-2 overflow-y-auto" style="max-height: {{ $canvasHeight }};">
                 @forelse ($workflows as $workflow)
                     <div
                         wire:click="selectWorkflow({{ $workflow['id'] }})"
                         @class([
-                            'group cursor-pointer rounded-lg border p-3 transition-colors',
-                            'border-primary-500 bg-primary-50 dark:bg-primary-950/20' => $selectedWorkflowId === $workflow['id'],
-                            'border-gray-200 bg-white hover:border-gray-300 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-gray-600' => $selectedWorkflowId !== $workflow['id'],
+                            'workflow-card group cursor-pointer rounded-xl border-2 p-3 transition-all duration-200',
+                            'workflow-card--selected shadow-sm' => $selectedWorkflowId === $workflow['id'],
                         ])
                     >
                         <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0 flex-1">
-                                <p class="truncate text-sm font-medium text-gray-900 dark:text-white">
+                                <p class="text-sm font-semibold text-gray-900 dark:text-white">
                                     {{ $workflow['name'] }}
                                 </p>
-                                <div class="mt-1 flex items-center gap-2">
+                                <div class="mt-1.5 flex items-center gap-2">
                                     <span @class([
                                         'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                                        'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' => $workflow['status'] === 'active',
-                                        'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400' => $workflow['status'] === 'draft',
-                                        'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' => $workflow['status'] === 'inactive',
+                                        'workflow-status-badge--active' => $workflow['status'] === 'active',
+                                        'workflow-status-badge--draft' => $workflow['status'] === 'draft',
+                                        'workflow-status-badge--inactive' => $workflow['status'] === 'inactive',
                                     ])>
                                         {{ $workflow['statusLabel'] }}
                                     </span>
@@ -56,6 +55,13 @@
                             </div>
 
                             <div class="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                                <button
+                                    wire:click.stop="mountAction('editWorkflow', { id: {{ $workflow['id'] }} })"
+                                    class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+                                    title="Settings"
+                                >
+                                    <x-filament::icon icon="heroicon-m-cog-6-tooth" class="h-4 w-4" />
+                                </button>
                                 <button
                                     wire:click.stop="toggleWorkflowStatus({{ $workflow['id'] }})"
                                     class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
@@ -79,7 +85,7 @@
                         </div>
                     </div>
                 @empty
-                    <div class="rounded-lg border border-dashed border-gray-300 p-6 text-center dark:border-gray-600">
+                    <div class="rounded-xl border border-dashed border-gray-300 p-6 text-center dark:border-gray-600">
                         <x-filament::icon icon="heroicon-o-bolt" class="mx-auto h-8 w-8 text-gray-400" />
                         <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">No workflows yet</p>
                         <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">Create your first workflow to automate tasks</p>
@@ -91,14 +97,17 @@
         {{-- Main Content Area --}}
         <div class="flex min-w-0 flex-1 flex-col gap-4">
             {{-- Diagram Canvas --}}
-            <div class="flex-1">
+            <div>
                 @if ($selectedWorkflowId)
                     @include('filament-diagrammer::filament.components.diagram-canvas')
                 @else
-                    <div class="flex h-full items-center justify-center rounded-lg border border-dashed border-gray-300 dark:border-gray-600">
+                    <div class="flex items-center justify-center rounded-xl border border-dashed border-gray-300 dark:border-gray-600" style="height: {{ $canvasHeight }};">
                         <div class="text-center">
-                            <x-filament::icon icon="heroicon-o-cursor-arrow-rays" class="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600" />
-                            <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">Select a workflow to edit</p>
+                            <x-filament::icon icon="heroicon-o-bolt" class="mx-auto h-12 w-12 text-gray-300 dark:text-gray-600" />
+                            <h3 class="mt-3 text-sm font-semibold text-gray-700 dark:text-gray-300">Workflow Automation</h3>
+                            <p class="mt-1 max-w-xs text-xs text-gray-400 dark:text-gray-500">
+                                Select a workflow from the sidebar to view and edit its automation flow, or create a new one.
+                            </p>
                         </div>
                     </div>
                 @endif
@@ -253,29 +262,6 @@
             @endif
         </div>
     </div>
-
-    {{-- Load CSS --}}
-    @once
-        @push('styles')
-            <link rel="stylesheet" href="{{ asset('css/filament-diagrammer.css') }}">
-        @endpush
-    @endonce
-
-    {{-- Load JS --}}
-    @once
-        @push('scripts')
-            <script src="{{ asset('js/filament-diagrammer.js') }}"></script>
-        @endpush
-    @endonce
-
-    {{-- Livewire Event Listeners --}}
-    <script>
-        document.addEventListener('livewire:navigated', () => {
-            if (typeof window.__diagrammerInit === 'function') {
-                window.__diagrammerInit();
-            }
-        });
-    </script>
 
     <x-filament-actions::modals />
 </x-filament-panels::page>

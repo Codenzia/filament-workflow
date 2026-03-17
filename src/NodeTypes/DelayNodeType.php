@@ -24,6 +24,11 @@ class DelayNodeType extends BaseNodeType
         return 'Delay';
     }
 
+    public static function description(): ?string
+    {
+        return __('filament-workflow::node-types.delay.description');
+    }
+
     public static function icon(): ?string
     {
         return 'heroicon-o-clock';

@@ -8,7 +8,9 @@ Visual workflow automation engine for Filament 4+ built on [filament-diagrammer]
 - Trigger → Condition → Delay → Action pipeline
 - IF/ELSE branching with condition nodes
 - Time-based triggers (due date reminders, overdue escalation)
-- Extensible trigger and action registry
+- Extensible trigger and action registry with **dynamic config forms**
+- Workflow templates (predefined flows)
+- Subclassable designer for app-specific customization
 - Execution logging and audit trail
 - Global + project-scoped workflows
 
@@ -37,6 +39,20 @@ Publish the config file (optional):
 ```bash
 php artisan vendor:publish --tag=filament-workflow-config
 ```
+
+### Tailwind v4 Custom Theme
+
+If your Filament panel uses a custom theme (Tailwind CSS v4), add source paths for both this package and its dependency `filament-diagrammer`:
+
+```css
+/* resources/css/filament/{panel}/theme.css */
+@source '../../../../vendor/codenzia/*/src/**/*.php';
+@source '../../../../vendor/codenzia/*/resources/views/**/*.blade.php';
+```
+
+This wildcard pattern covers all Codenzia packages (including the `filament-diagrammer` dependency) at once.
+
+Then rebuild your assets (`npm run build`).
 
 ## Quick Start
 
@@ -68,6 +84,17 @@ WorkflowEngine::registerTrigger('task.assigned', TaskAssignedTrigger::class);
 WorkflowEngine::registerAction('change_task_status', ChangeTaskStatusAction::class);
 WorkflowEngine::registerAction('assign_user', AssignUserAction::class);
 WorkflowEngine::registerAction('escalate', EscalateAction::class);
+
+// Model fields (shown in condition, trigger, and action config dropdowns)
+WorkflowEngine::registerModelFields(Task::class, [
+    'title' => 'Title',
+    'status' => 'Status',
+    'priority' => 'Priority',
+    'assigned_to_user_id' => 'Assigned To',
+    'due_date' => 'Due Date',
+    'progress' => 'Progress (%)',
+    // ...
+]);
 ```
 
 ### 3. Embed the designer in a page
@@ -78,6 +105,8 @@ WorkflowEngine::registerAction('escalate', EscalateAction::class);
     ['projectId' => $project->id, 'modelType' => Task::class]
 )
 ```
+
+The `modelType` parameter is **required** — the designer will abort if not provided.
 
 ## Configuration
 
@@ -113,6 +142,10 @@ return [
 | **Delay** | Blue | Wait before continuing (minutes/hours/days) | One input, one output |
 | **Action** | Purple | Execute an operation | One input, any outputs |
 
+Each node type includes a `description()` method with localizable help text (via `filament-workflow::node-types.*`). The palette sidebar shows a `?` tooltip on hover with this description.
+
+Double-click any node to open its settings editor. Right-click for the context menu with Settings, Delete, Connect to, and more.
+
 ### Triggers (Built-in)
 
 - **ModelCreated** — fires when a model is created
@@ -135,10 +168,11 @@ return [
 
 ### Custom Triggers
 
-Implement `TriggerInterface`:
+Implement `TriggerInterface`. The `configSchema()` method returns Filament form fields that appear in the node settings dialog when this trigger type is selected:
 
 ```php
 use Codenzia\FilamentWorkflow\Engine\Contracts\TriggerInterface;
+use Filament\Forms\Components\Select;
 use Illuminate\Database\Eloquent\Model;
 
 class TaskStatusChangedTrigger implements TriggerInterface
@@ -165,43 +199,152 @@ class TaskStatusChangedTrigger implements TriggerInterface
 
         return true;
     }
+
+    public static function configSchema(): array
+    {
+        return [
+            Select::make('config.from')
+                ->label('From Status')
+                ->placeholder('Any')
+                ->options(TaskStatusEnum::class),
+            Select::make('config.to')
+                ->label('To Status')
+                ->placeholder('Any')
+                ->options(TaskStatusEnum::class),
+        ];
+    }
 }
 ```
 
 ### Custom Actions
 
-Implement `ActionHandlerInterface`:
+Implement `ActionHandlerInterface`. The `configSchema()` method defines what the user configures on the action node:
 
 ```php
 use Codenzia\FilamentWorkflow\Engine\Contracts\ActionHandlerInterface;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Toggle;
 use Illuminate\Database\Eloquent\Model;
 
-class CloseParentAction implements ActionHandlerInterface
+class AssignUserAction implements ActionHandlerInterface
 {
     public static function label(): string
     {
-        return 'Close Parent Task';
+        return 'Assign User';
     }
 
     public function execute(Model $model, array $config, array $context): array
     {
-        $parent = $model->parent;
-        if (! $parent) {
-            return ['error' => 'No parent found'];
+        $userId = $config['user_id'] ?? null;
+        if (! $userId) {
+            return ['error' => 'No user specified'];
         }
 
-        $parent->update(['status' => 'closed']);
+        $model->update(['assigned_to_user_id' => $userId]);
 
-        return ['action' => 'close_parent', 'parent_id' => $parent->id];
+        return ['action' => 'assign_user', 'to_user_id' => $userId];
+    }
+
+    public static function configSchema(): array
+    {
+        return [
+            Select::make('config.user_id')
+                ->label('Assign to User')
+                ->options(fn () => User::pluck('name', 'id')->all())
+                ->searchable(),
+            Select::make('config.role')
+                ->label('Or Assign by Project Role')
+                ->options([
+                    'owner' => 'Project Owner',
+                    'lead' => 'Team Lead',
+                ]),
+        ];
     }
 }
 ```
+
+**Config field naming**: Use the `config.` prefix (e.g., `config.user_id`, `config.status`) so values are stored in the node's `config` JSON column. The node type forms automatically show/hide config fields based on the selected trigger/action type.
 
 ### Register in ServiceProvider
 
 ```php
 WorkflowEngine::registerTrigger('task.status_changed', TaskStatusChangedTrigger::class);
-WorkflowEngine::registerAction('close_parent', CloseParentAction::class);
+WorkflowEngine::registerAction('assign_user', AssignUserAction::class);
+```
+
+## Workflow Templates
+
+Provide predefined workflow templates by subclassing `WorkflowDesigner` and overriding `getWorkflowTemplates()`:
+
+```php
+use Codenzia\FilamentWorkflow\Pages\WorkflowDesigner;
+
+class TaskWorkflowDesigner extends WorkflowDesigner
+{
+    protected function getWorkflowTemplates(): array
+    {
+        return [
+            'auto_close_parent' => [
+                'name' => 'Auto-Close Parent Task',
+                'description' => 'When all subtasks are completed, close the parent.',
+                'icon' => 'heroicon-o-check-circle',
+                'nodes' => [
+                    [
+                        'node_type' => 'trigger',
+                        'type_config' => 'subtasks.all_closed',
+                        'label' => 'All Subtasks Closed',
+                        'config' => [],
+                        'position_x' => 300,
+                        'position_y' => 100,
+                    ],
+                    [
+                        'node_type' => 'action',
+                        'type_config' => 'close_parent',
+                        'label' => 'Close Parent',
+                        'config' => [],
+                        'position_x' => 300,
+                        'position_y' => 350,
+                    ],
+                ],
+                'connections' => [
+                    ['source' => 0, 'target' => 1],
+                ],
+            ],
+        ];
+    }
+}
+```
+
+When templates are available, the "New Workflow" dialog shows a **Start from template** dropdown. Selecting a template pre-fills the name and description, and scaffolds all nodes and connections on creation.
+
+Templates reference node indices (0, 1, 2...) for connections — the `source` and `target` values map to the `nodes` array order.
+
+## Customizing the Designer
+
+The `WorkflowDesigner` is designed for subclassing. Override these methods to customize:
+
+| Method | Purpose |
+|--------|---------|
+| `getWorkflowTemplates()` | Provide predefined workflow templates |
+| `getCreateWorkflowSchema()` | Form fields for "New Workflow" dialog |
+| `getEditWorkflowSchema()` | Form fields for "Settings" dialog |
+| `mapCreateData(array $data)` | Transform create form data → DB attributes |
+| `mapEditData(array $data)` | Transform edit form data → DB attributes |
+| `fillEditForm(Workflow $workflow)` | Populate edit form from model |
+
+Example — embedding a subclass:
+
+```blade
+@livewire(
+    \App\Filament\Pages\TaskWorkflowDesigner::class,
+    ['projectId' => $project->id, 'modelType' => Task::class]
+)
+```
+
+Remember to register the Livewire component in your `AppServiceProvider`:
+
+```php
+Livewire::component('app.filament.pages.task-workflow-designer', TaskWorkflowDesigner::class);
 ```
 
 ## Time-Based Triggers
@@ -222,7 +365,7 @@ For time-based triggers to work with the preview and scheduler, implement the op
 ```php
 class TaskOverdueTrigger implements TriggerInterface
 {
-    // ... matches() method ...
+    // ... matches() and configSchema() methods ...
 
     /**
      * Scope query to find models that match this time trigger.

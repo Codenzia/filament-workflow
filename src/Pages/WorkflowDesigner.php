@@ -40,9 +40,9 @@ class WorkflowDesigner extends Page
 {
     use HasDiagram;
 
-    protected static string $view = 'filament-workflow::pages.workflow-designer';
+    protected string $view = 'filament-workflow::pages.workflow-designer';
 
-    protected static ?string $navigationIcon = 'heroicon-o-bolt';
+    protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-bolt';
 
     protected static ?string $title = 'Workflow Automation';
 
@@ -58,6 +58,8 @@ class WorkflowDesigner extends Page
 
     public function mount(?int $projectId = null, ?string $modelType = null): void
     {
+        abort_unless($modelType && class_exists($modelType), 400, 'WorkflowDesigner requires a valid modelType.');
+
         $this->projectId = $projectId;
         $this->modelType = $modelType;
         $this->loadWorkflows();
@@ -105,7 +107,7 @@ class WorkflowDesigner extends Page
     protected function getDiagramCanvas(): DiagramCanvas
     {
         $canvas = DiagramCanvas::make()
-            ->height('calc(100vh - 200px)')
+            ->height('600px')
             ->palette([
                 TriggerNodeType::class,
                 ConditionNodeType::class,
@@ -141,8 +143,9 @@ class WorkflowDesigner extends Page
 
             if ($workflow) {
                 foreach ($workflow->nodes as $node) {
+                    $nodeTypeClass = $this->resolveNodeTypeClass($node->node_type->value);
                     $diagramNode = DiagramNode::make("wf-node-{$node->id}")
-                        ->type($this->resolveNodeTypeClass($node->node_type->value))
+                        ->type($nodeTypeClass)
                         ->label($node->label ?? $node->node_type->label())
                         ->position($node->position_x, $node->position_y)
                         ->data(array_merge($node->config ?? [], [
@@ -296,6 +299,173 @@ class WorkflowDesigner extends Page
         WorkflowNode::where('id', $dbId)->update($updateData);
     }
 
+    // ─── Workflow Templates (override in subclass to provide) ───────
+
+    /**
+     * Return available workflow templates.
+     * Override in subclass to provide app-specific predefined workflows.
+     *
+     * Each template is an array with:
+     *   - name: string — display name (also used as default workflow name)
+     *   - description: string — what this template does
+     *   - icon: string — heroicon name
+     *   - nodes: array — list of node definitions [{node_type, type_config, label, config, position_x, position_y}]
+     *   - connections: array — list of connections [{source, target, label}] where source/target are node array indices
+     *
+     * @return array<string, array>
+     */
+    protected function getWorkflowTemplates(): array
+    {
+        return [];
+    }
+
+    /**
+     * Scaffold nodes and connections from a template onto a workflow.
+     */
+    protected function scaffoldFromTemplate(Workflow $workflow, array $template): void
+    {
+        $nodeMap = []; // template index => DB node
+
+        foreach ($template['nodes'] ?? [] as $index => $nodeDef) {
+            $nodeMap[$index] = WorkflowNode::create([
+                'workflow_id' => $workflow->id,
+                'node_type' => $nodeDef['node_type'],
+                'type_config' => $nodeDef['type_config'] ?? null,
+                'label' => $nodeDef['label'] ?? null,
+                'config' => $nodeDef['config'] ?? [],
+                'position_x' => $nodeDef['position_x'] ?? ($index * 250 + 100),
+                'position_y' => $nodeDef['position_y'] ?? 200,
+            ]);
+        }
+
+        foreach ($template['connections'] ?? [] as $connDef) {
+            $sourceNode = $nodeMap[$connDef['source']] ?? null;
+            $targetNode = $nodeMap[$connDef['target']] ?? null;
+            if (! $sourceNode || ! $targetNode) {
+                continue;
+            }
+
+            WorkflowConnectionModel::create([
+                'workflow_id' => $workflow->id,
+                'source_node_id' => $sourceNode->id,
+                'target_node_id' => $targetNode->id,
+                'label' => $connDef['label'] ?? null,
+            ]);
+        }
+    }
+
+    // ─── Workflow Form Schema (override in subclass to customize) ───
+
+    /**
+     * Schema fields for the create workflow dialog.
+     * Override to add app-specific fields (e.g., model type selector, tags).
+     *
+     * @return array<\Filament\Schemas\Components\Component>
+     */
+    protected function getCreateWorkflowSchema(): array
+    {
+        $schema = [];
+
+        $templates = $this->getWorkflowTemplates();
+        if (! empty($templates)) {
+            $schema[] = Select::make('template')
+                ->label('Start from template')
+                ->placeholder('Blank workflow')
+                ->options(
+                    collect($templates)->mapWithKeys(fn (array $t, string $key) => [
+                        $key => $t['name'],
+                    ])->all()
+                )
+                ->live()
+                ->afterStateUpdated(function ($state, callable $set) use ($templates): void {
+                    if ($state && isset($templates[$state])) {
+                        $set('name', $templates[$state]['name']);
+                        $set('description', $templates[$state]['description'] ?? '');
+                    }
+                });
+        }
+
+        $schema[] = TextInput::make('name')
+            ->label('Workflow Name')
+            ->required();
+        $schema[] = Textarea::make('description')
+            ->label('Description')
+            ->rows(2);
+
+        return $schema;
+    }
+
+    /**
+     * Schema fields for the edit workflow dialog.
+     * Override to add app-specific fields.
+     *
+     * @return array<\Filament\Schemas\Components\Component>
+     */
+    protected function getEditWorkflowSchema(): array
+    {
+        return [
+            TextInput::make('name')
+                ->label('Workflow Name')
+                ->required(),
+            Textarea::make('description')
+                ->label('Description')
+                ->rows(2),
+            Select::make('status')
+                ->label('Status')
+                ->options(WorkflowStatusEnum::class)
+                ->required(),
+            TextInput::make('priority')
+                ->label('Priority')
+                ->helperText('Higher priority workflows execute first (0 = default)')
+                ->numeric()
+                ->default(0),
+        ];
+    }
+
+    /**
+     * Map form data to workflow attributes for create.
+     * Override to handle custom fields.
+     */
+    protected function mapCreateData(array $data): array
+    {
+        return [
+            'name' => $data['name'],
+            'description' => $data['description'] ?? null,
+            'model_type' => $this->modelType,
+            'project_id' => $this->projectId,
+            'status' => 'draft',
+            'created_by' => auth()->id(),
+        ];
+    }
+
+    /**
+     * Map form data to workflow attributes for update.
+     * Override to handle custom fields.
+     */
+    protected function mapEditData(array $data): array
+    {
+        return [
+            'name' => $data['name'],
+            'description' => $data['description'] ?? null,
+            'status' => $data['status'],
+            'priority' => $data['priority'] ?? 0,
+        ];
+    }
+
+    /**
+     * Fill form data for edit workflow dialog.
+     * Override to populate custom fields.
+     */
+    protected function fillEditForm(Workflow $workflow): array
+    {
+        return [
+            'name' => $workflow->name,
+            'description' => $workflow->description,
+            'status' => $workflow->status->value,
+            'priority' => $workflow->priority,
+        ];
+    }
+
     // ─── Workflow CRUD Actions ──────────────────────────────────────
 
     public function createWorkflowAction(): Action
@@ -303,28 +473,50 @@ class WorkflowDesigner extends Page
         return Action::make('createWorkflow')
             ->label('New Workflow')
             ->icon('heroicon-o-plus')
-            ->form([
-                TextInput::make('name')
-                    ->label('Workflow Name')
-                    ->required(),
-                Textarea::make('description')
-                    ->label('Description')
-                    ->rows(2),
-            ])
+            ->iconButton()
+            ->tooltip('New Workflow')
+            ->schema($this->getCreateWorkflowSchema())
             ->action(function (array $data): void {
-                $workflow = Workflow::create([
-                    'name' => $data['name'],
-                    'description' => $data['description'] ?? null,
-                    'model_type' => $this->modelType ?? 'App\\Models\\Task',
-                    'project_id' => $this->projectId,
-                    'status' => 'draft',
-                    'created_by' => auth()->id(),
-                ]);
+                $workflow = Workflow::create($this->mapCreateData($data));
+
+                // Scaffold from template if selected
+                $templateKey = $data['template'] ?? null;
+                $templates = $this->getWorkflowTemplates();
+                if ($templateKey && isset($templates[$templateKey])) {
+                    $this->scaffoldFromTemplate($workflow, $templates[$templateKey]);
+                }
 
                 $this->loadWorkflows();
                 $this->selectWorkflow($workflow->id);
 
                 Notification::make()->title('Workflow created')->success()->send();
+            });
+    }
+
+    public function editWorkflowAction(): Action
+    {
+        return Action::make('editWorkflow')
+            ->label('Edit Workflow')
+            ->icon('heroicon-o-cog-6-tooth')
+            ->iconButton()
+            ->tooltip('Workflow Settings')
+            ->fillForm(function (array $arguments): array {
+                $workflow = Workflow::find($arguments['id'] ?? null);
+
+                return $workflow ? $this->fillEditForm($workflow) : [];
+            })
+            ->schema($this->getEditWorkflowSchema())
+            ->action(function (array $data, array $arguments): void {
+                $workflow = Workflow::find($arguments['id'] ?? null);
+                if (! $workflow) {
+                    return;
+                }
+
+                $workflow->update($this->mapEditData($data));
+
+                $this->loadWorkflows();
+
+                Notification::make()->title('Workflow updated')->success()->send();
             });
     }
 
