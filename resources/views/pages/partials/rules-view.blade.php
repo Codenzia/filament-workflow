@@ -57,21 +57,21 @@
                         $color = $nodeType->color();
                         $icon = $nodeType->icon();
                     @endphp
-                    <div class="wf-rules-card wf-rules-card--orphan group">
-                        <div class="wf-rules-card-bar" style="background: {{ $color }}"></div>
+                    <div class="wf-rules-card wf-rules-card--orphan group" style="--step-color: {{ $color }}" x-data="{ hovered: false }" @mouseenter="hovered = true" @mouseleave="hovered = false">
+                        <div class="wf-rules-card-bar" style="background: var(--step-color)"></div>
                         <div class="flex-1 min-w-0 px-3 py-2">
                             <div class="flex items-center justify-between gap-2">
                                 <div class="flex items-center gap-2 min-w-0">
-                                    <x-filament::icon :icon="$icon" class="h-4 w-4 shrink-0" style="color: {{ $color }}" />
+                                    <x-filament::icon :icon="$icon" class="h-4 w-4 shrink-0" style="color: var(--step-color)" />
                                     <span
                                         class="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
-                                        style="color: {{ $color }}; border: 1px solid {{ $color }}40; background: {{ $color }}10"
+                                        style="color: var(--step-color); border: 1px solid color-mix(in srgb, var(--step-color) 25%, transparent); background: color-mix(in srgb, var(--step-color) 10%, transparent)"
                                     >{{ $nodeType->label() }}</span>
                                     @if ($orphanNode->label)
                                         <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ $orphanNode->label }}</span>
                                     @endif
                                 </div>
-                                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div x-show="hovered" x-cloak class="flex items-center gap-1">
                                     <button
                                         wire:click="onRulesStepDoubleClick({{ $orphanNode->id }})"
                                         class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"

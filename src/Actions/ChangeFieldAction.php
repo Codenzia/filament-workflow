@@ -9,6 +9,7 @@ use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Schema;
 
 class ChangeFieldAction implements ActionHandlerInterface
 {
@@ -31,6 +32,18 @@ class ChangeFieldAction implements ActionHandlerInterface
 
         if (! $field) {
             return ['error' => 'No field specified'];
+        }
+
+        // Allow-list the writable column to the fields registered for THIS
+        // model, and confirm the column actually exists. Prevents a workflow
+        // from writing arbitrary/sensitive attributes (is_admin, owner_id, …)
+        // and avoids aborting the whole run on a typo'd field name. A model
+        // with no registration has no writable fields at all — it must never
+        // borrow the allow-list of an unrelated model.
+        $allowed = array_keys(WorkflowEngine::getModelFields($model::class));
+
+        if (! in_array($field, $allowed, true) || ! Schema::hasColumn($model->getTable(), $field)) {
+            return ['action' => 'change_field', 'skipped' => true, 'reason' => "Field '{$field}' not writable"];
         }
 
         $oldValue = $model->getAttribute($field);

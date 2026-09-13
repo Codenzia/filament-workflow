@@ -15,7 +15,13 @@ return new class extends Migration
             $table->string('name');
             $table->text('description')->nullable();
             $table->string('model_type');
-            $table->foreignId('project_id')->nullable()->constrained()->nullOnDelete();
+            // Optional link to a host-app "project" concept. This package does
+            // not own or ship a `projects` table, so the column is left as a
+            // plain nullable, indexed foreign id with no enforced constraint —
+            // keeping migrations portable across sqlite/mysql/pgsql on hosts
+            // that have no `projects` table. The FK is attached below only when
+            // the host application actually provides that table.
+            $table->foreignId('project_id')->nullable();
             $table->string('status')->default('draft');
             $table->integer('priority')->default(0);
             $table->unsignedInteger('run_count')->default(0);
@@ -27,6 +33,15 @@ return new class extends Migration
             $table->index(['model_type', 'status']);
             $table->index(['project_id', 'status']);
         });
+
+        // Attach the project foreign key only when the host application owns a
+        // `projects` table. Kept outside the create() closure so the workflows
+        // table is created regardless of the host schema.
+        if (Schema::hasTable('projects')) {
+            Schema::table('workflows', function (Blueprint $table): void {
+                $table->foreign('project_id')->references('id')->on('projects')->nullOnDelete();
+            });
+        }
     }
 
     public function down(): void

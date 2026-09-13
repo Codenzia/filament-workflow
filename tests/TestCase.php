@@ -6,6 +6,7 @@ namespace Codenzia\FilamentWorkflow\Tests;
 
 use Codenzia\FilamentWorkflow\FilamentWorkflowServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\LivewireServiceProvider;
 use Orchestra\Testbench\TestCase as BaseTestCase;
 
 class TestCase extends BaseTestCase
@@ -15,8 +16,14 @@ class TestCase extends BaseTestCase
     protected function getPackageProviders($app): array
     {
         return [
+            LivewireServiceProvider::class,
             FilamentWorkflowServiceProvider::class,
         ];
+    }
+
+    protected function getEnvironmentSetUp($app): void
+    {
+        config()->set('app.key', 'base64:'.base64_encode(str_repeat('a', 32)));
     }
 
     protected function defineDatabaseMigrations(): void

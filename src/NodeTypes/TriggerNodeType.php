@@ -15,6 +15,7 @@ namespace Codenzia\FilamentWorkflow\NodeTypes;
 use Codenzia\FilamentDiagrammer\Enums\NodeShape;
 use Codenzia\FilamentDiagrammer\NodeTypes\BaseNodeType;
 use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
+use Codenzia\FilamentWorkflow\Enums\NodeTypeEnum;
 use Filament\Forms\Components\Select;
 
 class TriggerNodeType extends BaseNodeType
@@ -36,7 +37,7 @@ class TriggerNodeType extends BaseNodeType
 
     public static function defaultColor(): ?string
     {
-        return '#22c55e';
+        return NodeTypeEnum::TRIGGER->color();
     }
 
     public static function defaultShape(): NodeShape

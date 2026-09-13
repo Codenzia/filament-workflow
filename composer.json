@@ -1,7 +1,13 @@
 {
     "name": "codenzia/filament-workflow",
     "description": "Visual workflow automation engine for Filament 4+ built on filament-diagrammer",
-    "keywords": ["filament", "workflow", "automation", "laravel", "diagrammer"],
+    "keywords": [
+        "filament",
+        "workflow",
+        "automation",
+        "laravel",
+        "diagrammer"
+    ],
     "license": "MIT",
     "authors": [
         {
@@ -11,19 +17,21 @@
     ],
     "repositories": [
         {
-            "type": "path",
-            "url": "../filament-diagrammer"
+            "type": "vcs",
+            "url": "https://github.com/Codenzia/filament-diagrammer-dev.git"
         }
     ],
     "require": {
         "php": "^8.3",
-        "filament/filament": "^4.0",
-        "codenzia/filament-diagrammer": "dev-main"
+        "filament/filament": "^4.0 || ^5.0",
+        "codenzia/filament-diagrammer": "^0.2 || ^0.3"
     },
     "require-dev": {
-        "orchestra/testbench": "^10.0",
-        "pestphp/pest": "^3.0",
-        "laravel/pint": "^1.0"
+        "laravel/pint": "^1.29",
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "pestphp/pest": "^4.0",
+        "pestphp/pest-plugin-arch": "^4.0",
+        "pestphp/pest-plugin-laravel": "^4.0"
     },
     "autoload": {
         "psr-4": {
@@ -40,6 +48,9 @@
             "providers": [
                 "Codenzia\\FilamentWorkflow\\FilamentWorkflowServiceProvider"
             ]
+        },
+        "branch-alias": {
+            "dev-main": "0.3.x-dev"
         }
     },
     "config": {

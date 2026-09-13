@@ -14,6 +14,7 @@ namespace Codenzia\FilamentWorkflow\NodeTypes;
 
 use Codenzia\FilamentDiagrammer\Enums\NodeShape;
 use Codenzia\FilamentDiagrammer\NodeTypes\BaseNodeType;
+use Codenzia\FilamentWorkflow\Enums\NodeTypeEnum;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 
@@ -36,7 +37,7 @@ class DelayNodeType extends BaseNodeType
 
     public static function defaultColor(): ?string
     {
-        return '#3b82f6';
+        return NodeTypeEnum::DELAY->color();
     }
 
     public static function defaultShape(): NodeShape

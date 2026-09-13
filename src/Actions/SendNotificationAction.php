@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace Codenzia\FilamentWorkflow\Actions;
 
 use Codenzia\FilamentWorkflow\Engine\Contracts\ActionHandlerInterface;
+use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Notification;
+use Illuminate\Notifications\Notification as IlluminateNotification;
+use Illuminate\Support\Facades\DB;
 
 class SendNotificationAction implements ActionHandlerInterface
 {
@@ -45,9 +48,22 @@ class SendNotificationAction implements ActionHandlerInterface
         }
 
         $notificationClass = $config['notification_class'] ?? null;
-        if ($notificationClass && class_exists($notificationClass)) {
-            $user->notify(new $notificationClass($model, $context));
+
+        if (! $notificationClass || ! class_exists($notificationClass)) {
+            // Nothing is delivered without a notification class, so the node
+            // did not do what it says it does. Report the skip instead of a
+            // send that never happened.
+            return ['action' => 'send_notification', 'skipped' => true, 'reason' => 'No notification class configured'];
         }
+
+        if (! WorkflowEngine::isAllowedNotification($notificationClass)
+            || ! is_subclass_of($notificationClass, IlluminateNotification::class)) {
+            return ['action' => 'send_notification', 'skipped' => true, 'reason' => 'Notification class not allow-listed'];
+        }
+
+        // Mail, SMS and webhook channels cannot be rolled back with the
+        // workflow's transaction — deliver only once the run has committed.
+        DB::afterCommit(fn () => $user->notify(new $notificationClass($model, $context)));
 
         return [
             'action' => 'send_notification',
@@ -66,9 +82,11 @@ class SendNotificationAction implements ActionHandlerInterface
             TextInput::make('config.user_id')
                 ->label('Or Specific User ID')
                 ->numeric(),
-            TextInput::make('config.notification_class')
-                ->label('Notification Class (FQCN)')
-                ->placeholder('App\\Notifications\\...'),
+            Select::make('config.notification_class')
+                ->label('Notification Class')
+                ->options(fn (): array => WorkflowEngine::getAllowedNotificationClasses())
+                ->searchable()
+                ->helperText('Only allow-listed notification classes can be selected.'),
             TextInput::make('config.message')
                 ->label('Fallback Message'),
         ];

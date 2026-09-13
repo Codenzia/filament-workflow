@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace Codenzia\FilamentWorkflow\Enums;
 
+use Codenzia\FilamentWorkflow\NodeTypes\ActionNodeType;
+use Codenzia\FilamentWorkflow\NodeTypes\ConditionNodeType;
+use Codenzia\FilamentWorkflow\NodeTypes\DelayNodeType;
+use Codenzia\FilamentWorkflow\NodeTypes\TriggerNodeType;
+
 enum NodeTypeEnum: string
 {
     case TRIGGER = 'trigger';
@@ -38,6 +43,21 @@ enum NodeTypeEnum: string
             self::CONDITION => 'heroicon-o-funnel',
             self::DELAY => 'heroicon-o-clock',
             self::ACTION => 'heroicon-o-play',
+        };
+    }
+
+    /**
+     * The diagrammer NodeType class that renders this node type.
+     *
+     * @return class-string
+     */
+    public function nodeTypeClass(): string
+    {
+        return match ($this) {
+            self::TRIGGER => TriggerNodeType::class,
+            self::CONDITION => ConditionNodeType::class,
+            self::DELAY => DelayNodeType::class,
+            self::ACTION => ActionNodeType::class,
         };
     }
 }

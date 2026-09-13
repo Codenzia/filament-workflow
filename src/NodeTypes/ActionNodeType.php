@@ -15,6 +15,7 @@ namespace Codenzia\FilamentWorkflow\NodeTypes;
 use Codenzia\FilamentDiagrammer\Enums\NodeShape;
 use Codenzia\FilamentDiagrammer\NodeTypes\BaseNodeType;
 use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
+use Codenzia\FilamentWorkflow\Enums\NodeTypeEnum;
 use Filament\Forms\Components\Select;
 
 class ActionNodeType extends BaseNodeType
@@ -36,7 +37,7 @@ class ActionNodeType extends BaseNodeType
 
     public static function defaultColor(): ?string
     {
-        return '#8b5cf6';
+        return NodeTypeEnum::ACTION->color();
     }
 
     public static function defaultShape(): NodeShape

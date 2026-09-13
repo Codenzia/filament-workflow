@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Codenzia\FilamentWorkflow\Engine\Contracts;
 
+use Filament\Schemas\Components\Component;
 use Illuminate\Database\Eloquent\Model;
 
 interface ActionHandlerInterface
@@ -26,10 +27,10 @@ interface ActionHandlerInterface
     /**
      * Execute the action on the given model.
      *
-     * @param  Model  $model    The model to act upon
-     * @param  array  $config   The action node's configuration (field, value, user_id, etc.)
+     * @param  Model  $model  The model to act upon
+     * @param  array  $config  The action node's configuration (field, value, user_id, etc.)
      * @param  array  $context  Original trigger context
-     * @return array  Execution details for logging (what changed, etc.)
+     * @return array Execution details for logging (what changed, etc.)
      */
     public function execute(Model $model, array $config, array $context): array;
 
@@ -37,7 +38,7 @@ interface ActionHandlerInterface
      * Filament form schema for configuring this action's parameters.
      * Return an empty array if no configuration is needed.
      *
-     * @return array<\Filament\Forms\Components\Component>
+     * @return array<Component>
      */
     public static function configSchema(): array;
 }

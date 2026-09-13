@@ -27,6 +27,9 @@
                 @forelse ($workflows as $workflow)
                     <div
                         wire:click="selectWorkflow({{ $workflow['id'] }})"
+                        x-data="{ hovered: false }"
+                        @mouseenter="hovered = true"
+                        @mouseleave="hovered = false"
                         @class([
                             'workflow-card group cursor-pointer rounded-xl border-2 p-3 transition-all duration-200',
                             'workflow-card--selected shadow-sm' => $selectedWorkflowId === $workflow['id'],
@@ -54,7 +57,7 @@
                                 </div>
                             </div>
 
-                            <div class="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                            <div x-show="hovered" x-cloak class="flex shrink-0 items-center gap-1">
                                 <button
                                     wire:click.stop="mountAction('editWorkflow', { id: {{ $workflow['id'] }} })"
                                     class="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-700 dark:hover:text-gray-300"
@@ -149,13 +152,13 @@
             {{-- Monitoring Panel (below canvas) --}}
             @if ($selectedWorkflowId)
                 @php
-                    $schedulerStatus = $this->getSchedulerStatus();
-                    $timeTriggerPreview = $this->getTimeTriggerPreview();
-                    $executionHistory = $this->getExecutionHistory();
+                    $schedulerStatus = $this->getSchedulerStatus;
+                    $timeTriggerPreview = $this->getTimeTriggerPreview;
+                    $executionHistory = $this->getExecutionHistory;
                 @endphp
 
                 <div
-                    x-data="{ monitorOpen: false }"
+                    x-data="{ monitorOpen: @entangle('monitorOpen') }"
                     class="shrink-0 rounded-lg border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800"
                 >
                     {{-- Monitor Header (always visible) --}}
@@ -266,11 +269,13 @@
                                             <div class="flex items-center justify-between gap-2 text-xs">
                                                 <div class="flex min-w-0 items-center gap-1.5">
                                                     @if ($log['result'] === 'success')
-                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500"></span>
+                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" style="background: rgb(var(--success-500))"></span>
                                                     @elseif ($log['result'] === 'failure')
-                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500"></span>
+                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" style="background: rgb(var(--danger-500))"></span>
+                                                    @elseif ($log['result'] === 'error')
+                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" style="background: rgb(var(--warning-500))"></span>
                                                     @elseif ($log['result'] === 'delayed')
-                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500"></span>
+                                                        <span class="h-1.5 w-1.5 shrink-0 rounded-full" style="background: rgb(var(--info-500))"></span>
                                                     @else
                                                         <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-gray-400"></span>
                                                     @endif

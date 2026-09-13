@@ -16,6 +16,7 @@ use Codenzia\FilamentWorkflow\Enums\NodeTypeEnum;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
 class WorkflowNode extends Model
 {
@@ -77,9 +78,9 @@ class WorkflowNode extends Model
      * Optionally filtered by connection label (e.g., 'Yes' or 'No' for conditions).
      */
     /**
-     * @return \Illuminate\Support\Collection<int, WorkflowNode>
+     * @return Collection<int, WorkflowNode>
      */
-    public function getNextNodes(?string $connectionLabel = null): \Illuminate\Support\Collection
+    public function getNextNodes(?string $connectionLabel = null): Collection
     {
         $query = $this->outgoingConnections()->with('targetNode');
 

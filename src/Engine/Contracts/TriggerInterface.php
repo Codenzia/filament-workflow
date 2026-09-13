@@ -14,6 +14,7 @@ declare(strict_types=1);
 
 namespace Codenzia\FilamentWorkflow\Engine\Contracts;
 
+use Filament\Schemas\Components\Component;
 use Illuminate\Database\Eloquent\Model;
 
 interface TriggerInterface
@@ -26,8 +27,8 @@ interface TriggerInterface
     /**
      * Determine if this trigger matches the given context.
      *
-     * @param  Model  $model    The model that fired the event
-     * @param  array  $config   The trigger node's configuration (field, from, to, etc.)
+     * @param  Model  $model  The model that fired the event
+     * @param  array  $config  The trigger node's configuration (field, from, to, etc.)
      * @param  array  $context  Event context (e.g., ['from' => 'active', 'to' => 'closed'])
      */
     public function matches(Model $model, array $config, array $context): bool;
@@ -36,7 +37,7 @@ interface TriggerInterface
      * Filament form schema for configuring this trigger's parameters.
      * Return an empty array if no configuration is needed.
      *
-     * @return array<\Filament\Forms\Components\Component>
+     * @return array<Component>
      */
     public static function configSchema(): array;
 }

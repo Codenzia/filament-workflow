@@ -18,6 +18,7 @@ use Codenzia\FilamentDiagrammer\Components\DiagramConnection;
 use Codenzia\FilamentDiagrammer\Components\DiagramNode;
 use Codenzia\FilamentDiagrammer\Concerns\HasDiagram;
 use Codenzia\FilamentWorkflow\Concerns\HasRulesView;
+use Codenzia\FilamentWorkflow\Engine\Contracts\TimeTriggerInterface;
 use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
 use Codenzia\FilamentWorkflow\Enums\NodeTypeEnum;
 use Codenzia\FilamentWorkflow\Enums\WorkflowStatusEnum;
@@ -35,7 +36,10 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Component;
 use Illuminate\Support\Facades\Artisan;
+use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 
 class WorkflowDesigner extends Page
 {
@@ -50,17 +54,41 @@ class WorkflowDesigner extends Page
 
     protected static bool $shouldRegisterNavigation = false;
 
+    #[Locked]
     public ?int $projectId = null;
 
+    #[Locked]
     public ?string $modelType = null;
 
+    #[Locked]
     public ?int $selectedWorkflowId = null;
 
     public array $workflows = [];
 
+    public bool $monitorOpen = false;
+
+    public static function canAccess(): bool
+    {
+        $ability = config('filament-workflow.abilities.view', 'view_workflow');
+
+        return filament()->auth()->user()?->can($ability) ?? false;
+    }
+
+    /**
+     * Per-project authorization hook. Returns true by default (abilities are
+     * global). Override in a subclass to enforce project-membership checks
+     * before the designer mounts for a given project.
+     */
+    protected function authorizeProject(?int $projectId): bool
+    {
+        return true;
+    }
+
     public function mount(?int $projectId = null, ?string $modelType = null): void
     {
+        abort_unless(static::canAccess(), 403);
         abort_unless($modelType && class_exists($modelType), 400, 'WorkflowDesigner requires a valid modelType.');
+        abort_unless($this->authorizeProject($projectId), 403);
 
         $this->projectId = $projectId;
         $this->modelType = $modelType;
@@ -99,11 +127,43 @@ class WorkflowDesigner extends Page
         ])->toArray();
     }
 
+    /**
+     * Resolve a workflow by id, scoped to the mounted model type and project.
+     * Prevents cross-project / cross-model IDOR: a client cannot post an
+     * out-of-scope workflow id and have it loaded.
+     */
+    protected function findScopedWorkflow(?int $id): ?Workflow
+    {
+        if (! $id) {
+            return null;
+        }
+
+        return Workflow::query()
+            ->when($this->modelType, fn ($q) => $q->where('model_type', $this->modelType))
+            ->when($this->projectId, fn ($q) => $q->where(fn ($w) => $w->whereNull('project_id')->orWhere('project_id', $this->projectId)))
+            ->find($id);
+    }
+
     public function selectWorkflow(int $workflowId): void
     {
+        // Only select ids that are in scope for the mounted context.
+        if (! $this->findScopedWorkflow($workflowId)) {
+            return;
+        }
+
         $this->selectedWorkflowId = $workflowId;
         $this->initializeDiagram();
         $this->refreshDiagram();
+    }
+
+    /**
+     * Diagram mutations follow the workflow's own edit authorization; the
+     * diagrammer fails closed, so a workflow the user may not edit renders
+     * read-only rather than silently accepting canvas changes.
+     */
+    protected function canEditDiagram(): bool
+    {
+        return $this->canEditWorkflow() && $this->selectedWorkflowId !== null;
     }
 
     protected function getDiagramCanvas(): DiagramCanvas
@@ -120,7 +180,7 @@ class WorkflowDesigner extends Page
             ->contextMenu()
             ->undoRedo()
             ->fitView()
-            ->onNodeCreate(function (string $nodeId, string $nodeTypeClass, float $x, float $y): void {
+            ->onNodeCreate(function (string $nodeId, ?string $nodeTypeClass, float $x, float $y): void {
                 $this->persistNodeCreate($nodeId, $nodeTypeClass, $x, $y);
             })
             ->onNodeDelete(function (string $nodeId): void {
@@ -141,7 +201,7 @@ class WorkflowDesigner extends Page
 
         // Load nodes and connections from the selected workflow
         if ($this->selectedWorkflowId) {
-            $workflow = Workflow::with(['nodes', 'connections'])->find($this->selectedWorkflowId);
+            $workflow = $this->findScopedWorkflow($this->selectedWorkflowId)?->load(['nodes', 'connections']);
 
             if ($workflow) {
                 foreach ($workflow->nodes as $node) {
@@ -174,33 +234,24 @@ class WorkflowDesigner extends Page
 
     protected function resolveNodeTypeClass(string $nodeType): string
     {
-        return match ($nodeType) {
-            'trigger' => TriggerNodeType::class,
-            'condition' => ConditionNodeType::class,
-            'delay' => DelayNodeType::class,
-            'action' => ActionNodeType::class,
-            default => TriggerNodeType::class,
-        };
+        return NodeTypeEnum::tryFrom($nodeType)?->nodeTypeClass() ?? TriggerNodeType::class;
     }
 
     // ─── Persistence Callbacks ──────────────────────────────────────
 
-    protected function persistNodeCreate(string $nodeId, string $nodeTypeClass, float $x, float $y): void
+    protected function persistNodeCreate(string $nodeId, ?string $nodeTypeClass, float $x, float $y): void
     {
-        if (! $this->selectedWorkflowId) {
+        if (! $this->canEditWorkflow() || ! $this->selectedWorkflowId) {
             return;
         }
 
-        $nodeTypeMap = [
-            TriggerNodeType::class => 'trigger',
-            ConditionNodeType::class => 'condition',
-            DelayNodeType::class => 'delay',
-            ActionNodeType::class => 'action',
-        ];
+        $nodeType = collect(NodeTypeEnum::cases())
+            ->first(fn (NodeTypeEnum $case): bool => $case->nodeTypeClass() === $nodeTypeClass)?->value
+            ?? NodeTypeEnum::ACTION->value;
 
         WorkflowNode::create([
             'workflow_id' => $this->selectedWorkflowId,
-            'node_type' => $nodeTypeMap[$nodeTypeClass] ?? 'action',
+            'node_type' => $nodeType,
             'position_x' => $x,
             'position_y' => $y,
         ]);
@@ -208,23 +259,35 @@ class WorkflowDesigner extends Page
 
     protected function persistNodeDelete(string $nodeId): void
     {
+        if (! $this->canEditWorkflow() || ! $this->selectedWorkflowId) {
+            return;
+        }
+
         $dbId = $this->extractDbId($nodeId);
         if ($dbId) {
-            WorkflowNode::where('id', $dbId)->delete();
+            WorkflowNode::where('id', $dbId)
+                ->where('workflow_id', $this->selectedWorkflowId)
+                ->delete();
         }
     }
 
     protected function persistNodeMove(string $nodeId, float $x, float $y): void
     {
+        if (! $this->canEditWorkflow() || ! $this->selectedWorkflowId) {
+            return;
+        }
+
         $dbId = $this->extractDbId($nodeId);
         if ($dbId) {
-            WorkflowNode::where('id', $dbId)->update(['position_x' => $x, 'position_y' => $y]);
+            WorkflowNode::where('id', $dbId)
+                ->where('workflow_id', $this->selectedWorkflowId)
+                ->update(['position_x' => $x, 'position_y' => $y]);
         }
     }
 
     protected function persistConnectionCreate(string $sourceId, string $targetId): void
     {
-        if (! $this->selectedWorkflowId) {
+        if (! $this->canEditWorkflow() || ! $this->selectedWorkflowId) {
             return;
         }
 
@@ -232,6 +295,16 @@ class WorkflowDesigner extends Page
         $targetDbId = $this->extractDbId($targetId);
 
         if ($sourceDbId && $targetDbId) {
+            // Both nodes must belong to the selected workflow, else a client
+            // could graft foreign-workflow nodes into this graph.
+            $inScope = WorkflowNode::whereIn('id', [$sourceDbId, $targetDbId])
+                ->where('workflow_id', $this->selectedWorkflowId)
+                ->count() === 2;
+
+            if (! $inScope) {
+                return;
+            }
+
             WorkflowConnectionModel::create([
                 'workflow_id' => $this->selectedWorkflowId,
                 'source_node_id' => $sourceDbId,
@@ -242,11 +315,16 @@ class WorkflowDesigner extends Page
 
     protected function persistConnectionDelete(string $sourceId, string $targetId): void
     {
+        if (! $this->canEditWorkflow() || ! $this->selectedWorkflowId) {
+            return;
+        }
+
         $sourceDbId = $this->extractDbId($sourceId);
         $targetDbId = $this->extractDbId($targetId);
 
         if ($sourceDbId && $targetDbId) {
-            WorkflowConnectionModel::where('source_node_id', $sourceDbId)
+            WorkflowConnectionModel::where('workflow_id', $this->selectedWorkflowId)
+                ->where('source_node_id', $sourceDbId)
                 ->where('target_node_id', $targetDbId)
                 ->delete();
         }
@@ -256,7 +334,7 @@ class WorkflowDesigner extends Page
     {
         // Canvas state is persisted incrementally via individual callbacks.
         // This is called on explicit save — update canvas_data for zoom/pan state.
-        if ($this->selectedWorkflowId) {
+        if ($this->canEditWorkflow() && $this->selectedWorkflowId) {
             Workflow::where('id', $this->selectedWorkflowId)->update([
                 'canvas_data' => ['nodes' => $nodes, 'connections' => $connections],
             ]);
@@ -283,6 +361,12 @@ class WorkflowDesigner extends Page
 
     protected function handleNodeSave(array $data, ?string $nodeId = null): void
     {
+        if (! $this->canEditWorkflow() || ! $this->selectedWorkflowId) {
+            Notification::make()->title('Unauthorized')->danger()->send();
+
+            return;
+        }
+
         $dbId = $nodeId ? $this->extractDbId($nodeId) : null;
         if (! $dbId) {
             return;
@@ -298,7 +382,9 @@ class WorkflowDesigner extends Page
             $updateData['label'] = $data['label'];
         }
 
-        WorkflowNode::where('id', $dbId)->update($updateData);
+        WorkflowNode::where('id', $dbId)
+            ->where('workflow_id', $this->selectedWorkflowId)
+            ->update($updateData);
     }
 
     // ─── Workflow Templates (override in subclass to provide) ───────
@@ -362,7 +448,7 @@ class WorkflowDesigner extends Page
      * Schema fields for the create workflow dialog.
      * Override to add app-specific fields (e.g., model type selector, tags).
      *
-     * @return array<\Filament\Schemas\Components\Component>
+     * @return array<Component>
      */
     protected function getCreateWorkflowSchema(): array
     {
@@ -401,7 +487,7 @@ class WorkflowDesigner extends Page
      * Schema fields for the edit workflow dialog.
      * Override to add app-specific fields.
      *
-     * @return array<\Filament\Schemas\Components\Component>
+     * @return array<Component>
      */
     protected function getEditWorkflowSchema(): array
     {
@@ -470,6 +556,26 @@ class WorkflowDesigner extends Page
 
     // ─── Workflow CRUD Actions ──────────────────────────────────────
 
+    public function canCreateWorkflow(): bool
+    {
+        return filament()->auth()->user()?->can(config('filament-workflow.abilities.create', 'create_workflow')) ?? false;
+    }
+
+    public function canEditWorkflow(): bool
+    {
+        return filament()->auth()->user()?->can(config('filament-workflow.abilities.edit', 'edit_workflow')) ?? false;
+    }
+
+    public function canDeleteWorkflow(): bool
+    {
+        return filament()->auth()->user()?->can(config('filament-workflow.abilities.delete', 'delete_workflow')) ?? false;
+    }
+
+    public function canRunTimeTriggers(): bool
+    {
+        return filament()->auth()->user()?->can(config('filament-workflow.abilities.run_triggers', 'run_workflow_triggers')) ?? false;
+    }
+
     public function createWorkflowAction(): Action
     {
         return Action::make('createWorkflow')
@@ -477,6 +583,7 @@ class WorkflowDesigner extends Page
             ->icon('heroicon-o-plus')
             ->iconButton()
             ->tooltip('New Workflow')
+            ->visible(fn (): bool => $this->canCreateWorkflow())
             ->schema($this->getCreateWorkflowSchema())
             ->action(function (array $data): void {
                 $workflow = Workflow::create($this->mapCreateData($data));
@@ -502,14 +609,21 @@ class WorkflowDesigner extends Page
             ->icon('heroicon-o-cog-6-tooth')
             ->iconButton()
             ->tooltip('Workflow Settings')
+            ->visible(fn (): bool => $this->canEditWorkflow())
             ->fillForm(function (array $arguments): array {
-                $workflow = Workflow::find($arguments['id'] ?? null);
+                $workflow = $this->findScopedWorkflow($arguments['id'] ?? null);
 
                 return $workflow ? $this->fillEditForm($workflow) : [];
             })
             ->schema($this->getEditWorkflowSchema())
             ->action(function (array $data, array $arguments): void {
-                $workflow = Workflow::find($arguments['id'] ?? null);
+                if (! $this->canEditWorkflow()) {
+                    Notification::make()->title('Unauthorized')->danger()->send();
+
+                    return;
+                }
+
+                $workflow = $this->findScopedWorkflow($arguments['id'] ?? null);
                 if (! $workflow) {
                     return;
                 }
@@ -524,7 +638,13 @@ class WorkflowDesigner extends Page
 
     public function toggleWorkflowStatus(int $workflowId): void
     {
-        $workflow = Workflow::find($workflowId);
+        if (! $this->canEditWorkflow()) {
+            Notification::make()->title('Unauthorized')->danger()->send();
+
+            return;
+        }
+
+        $workflow = $this->findScopedWorkflow($workflowId);
         if (! $workflow) {
             return;
         }
@@ -548,6 +668,7 @@ class WorkflowDesigner extends Page
             ->label('Delete Workflow')
             ->icon('heroicon-o-trash')
             ->color('danger')
+            ->visible(fn (): bool => $this->canDeleteWorkflow())
             ->requiresConfirmation()
             ->modalDescription('This will permanently delete the workflow and all its steps. This cannot be undone.')
             ->action(function (array $arguments): void {
@@ -557,7 +678,18 @@ class WorkflowDesigner extends Page
 
     public function deleteWorkflow(int $workflowId): void
     {
-        Workflow::where('id', $workflowId)->delete();
+        if (! $this->canDeleteWorkflow()) {
+            Notification::make()->title('Unauthorized')->danger()->send();
+
+            return;
+        }
+
+        $workflow = $this->findScopedWorkflow($workflowId);
+        if (! $workflow) {
+            return;
+        }
+
+        $workflow->delete();
 
         $this->loadWorkflows();
 
@@ -577,11 +709,17 @@ class WorkflowDesigner extends Page
      */
     public function runTimeTriggers(): void
     {
+        if (! $this->canRunTimeTriggers()) {
+            Notification::make()->title('Unauthorized')->danger()->send();
+
+            return;
+        }
+
         if (! $this->selectedWorkflowId) {
             return;
         }
 
-        $workflow = Workflow::with('nodes')->find($this->selectedWorkflowId);
+        $workflow = $this->findScopedWorkflow($this->selectedWorkflowId)?->load('nodes');
         if (! $workflow) {
             return;
         }
@@ -609,7 +747,7 @@ class WorkflowDesigner extends Page
             return;
         }
 
-        Artisan::call('workflow:process-time-triggers');
+        Artisan::call('workflow:process-time-triggers', ['--workflow' => $this->selectedWorkflowId]);
         $output = Artisan::output();
 
         $this->loadWorkflows();
@@ -626,9 +764,10 @@ class WorkflowDesigner extends Page
      *
      * @return array<int, array{id: int, node_label: ?string, node_type: ?string, model_id: int, trigger_type: string, result: string, executed_at: string, details: ?array}>
      */
+    #[Computed]
     public function getExecutionHistory(): array
     {
-        if (! $this->selectedWorkflowId) {
+        if (! $this->selectedWorkflowId || ! $this->findScopedWorkflow($this->selectedWorkflowId)) {
             return [];
         }
 
@@ -656,13 +795,14 @@ class WorkflowDesigner extends Page
      *
      * @return array{has_time_triggers: bool, matching_count: int, models: array}
      */
+    #[Computed]
     public function getTimeTriggerPreview(): array
     {
         if (! $this->selectedWorkflowId) {
             return ['has_time_triggers' => false, 'matching_count' => 0, 'models' => []];
         }
 
-        $workflow = Workflow::with('nodes')->find($this->selectedWorkflowId);
+        $workflow = $this->findScopedWorkflow($this->selectedWorkflowId)?->load('nodes');
         if (! $workflow) {
             return ['has_time_triggers' => false, 'matching_count' => 0, 'models' => []];
         }
@@ -675,6 +815,12 @@ class WorkflowDesigner extends Page
             return ['has_time_triggers' => false, 'matching_count' => 0, 'models' => []];
         }
 
+        // Defer the live host-model queries until the monitor panel is opened,
+        // so routine interactions (node drag, tab switch) stay cheap.
+        if (! $this->monitorOpen) {
+            return ['has_time_triggers' => true, 'matching_count' => 0, 'models' => []];
+        }
+
         $modelClass = $workflow->model_type;
         if (! class_exists($modelClass)) {
             return ['has_time_triggers' => true, 'matching_count' => 0, 'models' => []];
@@ -685,12 +831,19 @@ class WorkflowDesigner extends Page
 
         foreach ($timeTriggerNodes as $node) {
             $triggerClass = $triggers[$node->type_config] ?? null;
-            if (! $triggerClass || ! method_exists($triggerClass, 'scopeMatchingModels')) {
+            if (! $triggerClass) {
+                continue;
+            }
+
+            // Resolve an instance and call it — never call a (possibly
+            // non-static) method statically on the class string.
+            $trigger = app($triggerClass);
+            if (! $trigger instanceof TimeTriggerInterface) {
                 continue;
             }
 
             $query = $modelClass::query();
-            $models = $triggerClass::scopeMatchingModels($query, $node->config ?? [])
+            $models = $trigger->matchingModels($query, $node->config ?? [])
                 ->limit(10)
                 ->get();
 
@@ -714,13 +867,14 @@ class WorkflowDesigner extends Page
      *
      * @return array{last_run_at: ?string, total_runs: int, last_24h_executions: int, dedup_window: int}
      */
+    #[Computed]
     public function getSchedulerStatus(): array
     {
         if (! $this->selectedWorkflowId) {
             return ['last_run_at' => null, 'total_runs' => 0, 'last_24h_executions' => 0, 'dedup_window' => 24];
         }
 
-        $workflow = Workflow::find($this->selectedWorkflowId);
+        $workflow = $this->findScopedWorkflow($this->selectedWorkflowId);
         if (! $workflow) {
             return ['last_run_at' => null, 'total_runs' => 0, 'last_24h_executions' => 0, 'dedup_window' => 24];
         }

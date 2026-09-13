@@ -17,6 +17,7 @@ beforeEach(function (): void {
     WorkflowEngine::registerTrigger('model.created', ModelCreatedTrigger::class);
     WorkflowEngine::registerAction('change_field', ChangeFieldAction::class);
     WorkflowEngine::registerAction('send_notification', SendNotificationAction::class);
+    WorkflowEngine::registerModelFields(TestModel::class, ['name' => 'Name']);
 });
 
 it('executes a complete trigger → action flow', function (): void {

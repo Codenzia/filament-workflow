@@ -8,3 +8,6 @@
 *.swo
 .DS_Store
 Thumbs.db
+
+# internal review docs
+fable-*.md

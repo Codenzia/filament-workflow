@@ -15,9 +15,10 @@ beforeEach(function (): void {
     WorkflowEngine::clearRegistrations();
     WorkflowEngine::registerTrigger('model.created', ModelCreatedTrigger::class);
     WorkflowEngine::registerAction('change_field', ChangeFieldAction::class);
+    WorkflowEngine::registerModelFields(TestModel::class, ['name' => 'Name']);
 });
 
-it('does not re-evaluate when engine is already executing', function (): void {
+it('does not re-evaluate when engine is already executing on the same model', function (): void {
     $workflow = Workflow::create([
         'name' => 'Loop Test',
         'model_type' => TestModel::class,
@@ -32,19 +33,20 @@ it('does not re-evaluate when engine is already executing', function (): void {
 
     $model = TestModel::create(['name' => 'Test']);
 
-    // Simulate engine already executing
-    $ref = new ReflectionProperty(WorkflowEngine::class, 'executing');
+    // Simulate engine already executing on this specific model.
+    $ref = new ReflectionProperty(WorkflowEngine::class, 'executingModels');
     $ref->setAccessible(true);
-    $ref->setValue(null, true);
+    $modelKey = TestModel::class.':'.$model->getKey();
+    $ref->setValue(null, [$modelKey => true]);
 
     $engine = new WorkflowEngine;
     $engine->evaluate($model, 'model.created', ['event' => 'created']);
 
-    // Should have been skipped
+    // Should have been skipped (re-entrance on same model)
     expect(WorkflowExecutionLog::count())->toBe(0);
 
     // Reset
-    $ref->setValue(null, false);
+    $ref->setValue(null, []);
 });
 
 it('resets executing flag after completion even on exception', function (): void {

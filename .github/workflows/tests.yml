@@ -1,0 +1,27 @@
+name: tests
+
+# Thin caller — delegates to the reusable workflow in Codenzia/plugin-runtime.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    uses: Codenzia/plugin-runtime/.github/workflows/plugin-tests.yml@v1.2.2
+    with:
+      # Disabled until concurrent agent's engine refactor lands + a pint
+      # baseline is applied. Re-enable once src/Engine/* is stable.
+      pint: false
+      # Filament v5 requires Livewire v4; this plugin's composer pins
+      # Livewire ^3. Re-enable once we widen the Livewire constraint.
+      skip_filament_v5: true
+    # Composer needs CODENZIA_PAT + SATIS_USER/SATIS_PASS to resolve the
+    # in-house codenzia/* dependencies from packages.codenzia.com.
+    secrets: inherit

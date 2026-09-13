@@ -15,6 +15,9 @@ namespace Codenzia\FilamentWorkflow;
 use Codenzia\FilamentWorkflow\Commands\ProcessTimeTriggersCommand;
 use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
 use Codenzia\FilamentWorkflow\Pages\WorkflowDesigner;
+use Codenzia\FilamentWorkflow\Triggers\FieldChangedTrigger;
+use Codenzia\FilamentWorkflow\Triggers\ModelCreatedTrigger;
+use Codenzia\FilamentWorkflow\Triggers\ModelUpdatedTrigger;
 use Filament\Support\Assets\Css;
 use Filament\Support\Facades\FilamentAsset;
 use Illuminate\Support\ServiceProvider;
@@ -36,6 +39,13 @@ class FilamentWorkflowServiceProvider extends ServiceProvider
         $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
         $this->loadViewsFrom(__DIR__.'/../resources/views', 'filament-workflow');
         $this->loadTranslationsFrom(__DIR__.'/../resources/lang', 'filament-workflow');
+
+        // Register the shipped triggers so the package works without host glue.
+        // Registration is keyed and therefore idempotent — a host re-registering
+        // the same key simply overrides these defaults.
+        WorkflowEngine::registerTrigger('model.created', ModelCreatedTrigger::class);
+        WorkflowEngine::registerTrigger('model.updated', ModelUpdatedTrigger::class);
+        WorkflowEngine::registerTrigger('field.changed', FieldChangedTrigger::class);
 
         Livewire::component('codenzia.filament-workflow.pages.workflow-designer', WorkflowDesigner::class);
 

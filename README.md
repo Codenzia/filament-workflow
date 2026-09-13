@@ -1,25 +1,42 @@
-# Filament Workflow
+# Filament Workflow — Visual automation engine for Filament
 
-Visual workflow automation engine for Filament 4+ built on [filament-diagrammer](https://github.com/Codenzia/filament-diagrammer).
+[![Latest Version](https://img.shields.io/packagist/v/codenzia/filament-workflow.svg?style=flat-square)](https://packagist.org/packages/codenzia/filament-workflow)
+[![PHP Version](https://img.shields.io/packagist/php-v/codenzia/filament-workflow.svg?style=flat-square)](https://packagist.org/packages/codenzia/filament-workflow)
+[![Filament](https://img.shields.io/badge/Filament-v4%20%7C%20v5-f59e0b?style=flat-square)](https://filamentphp.com)
+[![Tests](https://img.shields.io/badge/tests-Pest%20v3-8b5cf6?style=flat-square)](https://pestphp.com)
+[![License](https://img.shields.io/packagist/l/codenzia/filament-workflow.svg?style=flat-square)](LICENSE.md)
+
+A **visual workflow automation engine for [Filament v4 and v5](https://filamentphp.com)** built on [`codenzia/filament-diagrammer`](https://github.com/Codenzia/filament-diagrammer). Drag-and-drop node builder, trigger → condition → delay → action pipelines, IF/ELSE branching, time-based triggers, extensible trigger + action registries with dynamic config forms — all native Filament, no external workflow service required.
+
+> **Why this exists.** Zapier/Make.com are great until your data lives behind auth and your triggers fire from Eloquent events. Pulling app data into a third-party automation service means webhooks, OAuth, and ongoing per-execution fees. `filament-workflow` puts the entire engine inside your Laravel app — visual builder, execution, logging, retries — with first-class access to your models.
+
+> **Try it live:** A working integration is included in the [Codenzia plugins demo](https://github.com/Codenzia/plugins-demo) at `/admin/demo/workflow`.
+
+---
 
 ## Features
 
-- Visual flow builder with drag-and-drop nodes
-- Trigger → Condition → Delay → Action pipeline
-- IF/ELSE branching with condition nodes
-- Time-based triggers (due date reminders, overdue escalation)
-- Extensible trigger and action registry with **dynamic config forms**
-- Workflow templates (predefined flows)
-- Subclassable designer for app-specific customization
-- Execution logging and audit trail
-- Global + project-scoped workflows
+- **Visual flow builder** — drag-and-drop nodes powered by `filament-diagrammer`.
+- **Trigger → Condition → Delay → Action pipeline.**
+- **IF/ELSE branching** with condition nodes.
+- **Time-based triggers** — due-date reminders, overdue escalation, etc.
+- **Extensible trigger + action registry** with **dynamic config forms** rendered per registered type.
+- **Workflow templates** — predefined flows you can ship as starting points.
+- **Subclassable designer** — extend the builder page for app-specific customisation.
+- **Execution logging + audit trail** — every step, every retry recorded.
+- **Global + project-scoped workflows.**
+
+---
 
 ## Requirements
 
-- PHP 8.3+
-- Laravel 12+
-- Filament 4+
-- `codenzia/filament-diagrammer`
+| Dependency | Version |
+|---|---|
+| PHP | `^8.3` |
+| Filament | `^4.0 \|\| ^5.0` |
+| `codenzia/filament-diagrammer` | Latest |
+
+---
 
 ## Installation
 
@@ -85,7 +102,11 @@ WorkflowEngine::registerAction('change_task_status', ChangeTaskStatusAction::cla
 WorkflowEngine::registerAction('assign_user', AssignUserAction::class);
 WorkflowEngine::registerAction('escalate', EscalateAction::class);
 
-// Model fields (shown in condition, trigger, and action config dropdowns)
+// Model fields. This is BOTH the designer dropdown list and the security
+// allow-list: only fields registered for a model can be written by
+// ChangeFieldAction, and only their changes are serialised into workflow
+// event payloads. A model with no registration has neither — its updates
+// dispatch no workflow evaluation at all.
 WorkflowEngine::registerModelFields(Task::class, [
     'title' => 'Title',
     'status' => 'Status',
@@ -139,14 +160,25 @@ return [
     // Max nodes per workflow run (infinite loop prevention)
     'max_nodes_per_run' => 50,
 
+    // Delayed continuations one run may schedule, and its maximum lifetime
+    'max_run_hops' => 100,
+    'max_run_days' => 30,
+
     // Time trigger check interval (minutes)
     'time_trigger_interval' => 15,
+
+    // Candidate models loaded per chunk by the time-trigger command
+    'time_trigger_chunk_size' => 500,
 
     // Hours before same trigger can re-fire on same model
     'dedup_window_hours' => 24,
 
     // Days to keep execution logs
     'log_retention_days' => 90,
+
+    // Backoff when a queued job cannot acquire the per-model lock
+    'lock_retry_base_seconds' => 5,
+    'lock_retry_max_seconds' => 300,
 ];
 ```
 
@@ -377,8 +409,11 @@ For triggers based on due dates or overdue status, schedule the command:
 
 ```php
 // routes/console.php
-Schedule::command('workflow:process-time-triggers')->everyFifteenMinutes();
+Schedule::command('workflow:process-time-triggers')
+    ->cron('*/'.config('filament-workflow.time_trigger_interval').' * * * *');
 ```
+
+The interval (in minutes) is driven by the `time_trigger_interval` config value.
 
 The command finds active workflows with time-based trigger nodes, queries matching models, and dispatches evaluation jobs. Deduplication prevents the same model+workflow from re-triggering within the configured window (default: 24 hours).
 
@@ -431,7 +466,7 @@ The WorkflowDesigner includes a collapsible **Monitor** panel below the canvas t
 - A list of the first 10 matching models (ID + label)
 
 ### Recent Executions
-- Color-coded execution log (green = success, red = failure, blue = delayed, gray = skipped)
+- Color-coded execution log (green = success, red = failure, amber = error, blue = delayed, gray = skipped)
 - Node label, model ID, and relative timestamp for each execution
 - Last 10 executions shown inline, up to 50 available via scroll
 
@@ -442,21 +477,41 @@ Every node execution is logged to `workflow_execution_logs` with:
 - Workflow and node IDs
 - Model type and ID
 - Trigger type
-- Result (success, failure, skipped, delayed)
-- Execution details (what changed, what failed, etc.)
+- Result:
+  - `success` — the node did what it says it does
+  - `skipped` — a deliberate no-op (trigger didn't match, action guard held);
+    the branch continues
+  - `error` — the action reported it could not act; the branch stops but the
+    run is not rolled back
+  - `failure` — the node threw or is unregistered; the whole run rolls back
+  - `delayed` — a continuation was scheduled
+- Execution details, including the `run_id` and `hop` that identify the run
 - Timestamp
 
 ## Infinite Loop Prevention
 
-The engine uses two mechanisms:
+Every run carries a durable identity (`run_id`) that travels with each delayed
+continuation, so the guards below apply to the whole run rather than to one
+process:
 
 1. **Static `$executing` flag** — prevents re-entrant execution when model changes trigger new evaluations
-2. **Max nodes per run** — limits the number of nodes executed in a single workflow run (default: 50)
+2. **Visited-node set** — a node already executed in the run is skipped, including when the cycle passes through a delay node
+3. **Max nodes per run** — limits the number of nodes executed in a single workflow run (default: 50)
+4. **Max hops / max duration** — a run may schedule at most `max_run_hops`
+   delayed continuations (default 100) and may live at most `max_run_days`
+   (default 30) before it ends with a recorded reason
 
 ## Database Schema
 
 ### `workflows`
 Stores workflow definitions with name, model type, project scope, status, and priority.
+
+> **`project_id` is host-owned.** Workflows can be scoped to a project or left
+> global (`project_id = null`). This package does **not** ship a `projects`
+> table, so `project_id` is a plain nullable, indexed column with no enforced
+> foreign key — migrations stay portable across sqlite/mysql/pgsql on hosts that
+> have no `projects` table. If your application provides a `projects` table, the
+> migration attaches a `nullOnDelete` foreign key to it automatically.
 
 ### `workflow_nodes`
 Individual nodes in a workflow: type (trigger/condition/delay/action), configuration, and canvas position.

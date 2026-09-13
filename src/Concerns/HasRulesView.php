@@ -16,13 +16,8 @@ namespace Codenzia\FilamentWorkflow\Concerns;
 
 use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
 use Codenzia\FilamentWorkflow\Enums\NodeTypeEnum;
-use Codenzia\FilamentWorkflow\Models\Workflow;
 use Codenzia\FilamentWorkflow\Models\WorkflowConnection;
 use Codenzia\FilamentWorkflow\Models\WorkflowNode;
-use Codenzia\FilamentWorkflow\NodeTypes\ActionNodeType;
-use Codenzia\FilamentWorkflow\NodeTypes\ConditionNodeType;
-use Codenzia\FilamentWorkflow\NodeTypes\DelayNodeType;
-use Codenzia\FilamentWorkflow\NodeTypes\TriggerNodeType;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -59,7 +54,7 @@ trait HasRulesView
             return ['flows' => [], 'orphans' => []];
         }
 
-        $workflow = Workflow::with(['nodes', 'connections'])->find($this->selectedWorkflowId);
+        $workflow = $this->findScopedWorkflow($this->selectedWorkflowId)?->load(['nodes', 'connections']);
         if (! $workflow) {
             return ['flows' => [], 'orphans' => []];
         }
@@ -219,7 +214,7 @@ trait HasRulesView
         $summary = implode($logic === 'or' ? ' OR ' : ' AND ', $parts);
 
         if (count($conditions) > 2) {
-            $summary .= ' (+' . (count($conditions) - 2) . ' more)';
+            $summary .= ' (+'.(count($conditions) - 2).' more)';
         }
 
         return $summary;
@@ -267,7 +262,18 @@ trait HasRulesView
      */
     public function addRulesStep(string $nodeType, ?string $typeConfig = null, ?string $label = null, ?int $afterNodeId = null, ?string $branch = null): void
     {
+        if (! $this->canEditWorkflow()) {
+            Notification::make()->title('Unauthorized')->danger()->send();
+
+            return;
+        }
+
         if (! $this->selectedWorkflowId) {
+            return;
+        }
+
+        // A supplied insertion anchor must belong to the selected workflow.
+        if ($afterNodeId && ! WorkflowNode::whereKey($afterNodeId)->where('workflow_id', $this->selectedWorkflowId)->exists()) {
             return;
         }
 
@@ -322,6 +328,12 @@ trait HasRulesView
      */
     public function removeRulesStep(int $nodeId): void
     {
+        if (! $this->canEditWorkflow()) {
+            Notification::make()->title('Unauthorized')->danger()->send();
+
+            return;
+        }
+
         $node = WorkflowNode::where('id', $nodeId)
             ->where('workflow_id', $this->selectedWorkflowId)
             ->first();
@@ -524,11 +536,15 @@ trait HasRulesView
      */
     public function computeAutoLayout(): void
     {
+        if (! $this->canEditWorkflow()) {
+            return;
+        }
+
         if (! $this->selectedWorkflowId) {
             return;
         }
 
-        $workflow = Workflow::with(['nodes', 'connections'])->find($this->selectedWorkflowId);
+        $workflow = $this->findScopedWorkflow($this->selectedWorkflowId)?->load(['nodes', 'connections']);
         if (! $workflow) {
             return;
         }

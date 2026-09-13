@@ -16,6 +16,7 @@ use Codenzia\FilamentDiagrammer\Enums\NodeShape;
 use Codenzia\FilamentDiagrammer\NodeTypes\BaseNodeType;
 use Codenzia\FilamentWorkflow\Engine\WorkflowEngine;
 use Codenzia\FilamentWorkflow\Enums\ConditionOperatorEnum;
+use Codenzia\FilamentWorkflow\Enums\NodeTypeEnum;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
@@ -39,7 +40,7 @@ class ConditionNodeType extends BaseNodeType
 
     public static function defaultColor(): ?string
     {
-        return '#eab308';
+        return NodeTypeEnum::CONDITION->color();
     }
 
     public static function defaultShape(): NodeShape

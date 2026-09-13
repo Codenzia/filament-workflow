@@ -15,9 +15,10 @@ namespace Codenzia\FilamentWorkflow\Models;
 
 use Codenzia\FilamentWorkflow\Enums\WorkflowStatusEnum;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Workflow extends Model
 {
@@ -28,8 +29,6 @@ class Workflow extends Model
         'project_id',
         'status',
         'priority',
-        'run_count',
-        'last_run_at',
         'canvas_data',
         'created_by',
     ];
@@ -115,7 +114,7 @@ class Workflow extends Model
     /**
      * Get the trigger node(s) for this workflow.
      */
-    public function getTriggerNodes(): \Illuminate\Database\Eloquent\Collection
+    public function getTriggerNodes(): Collection
     {
         return $this->nodes()->where('node_type', 'trigger')->get();
     }
@@ -125,7 +124,7 @@ class Workflow extends Model
      */
     public function recordRun(): void
     {
-        $this->increment('run_count');
-        $this->update(['last_run_at' => now()]);
+        // Single write: increment() accepts extra column updates as its third arg.
+        $this->increment('run_count', 1, ['last_run_at' => now()]);
     }
 }

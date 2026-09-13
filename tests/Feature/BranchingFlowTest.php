@@ -14,6 +14,7 @@ beforeEach(function (): void {
     WorkflowEngine::clearRegistrations();
     WorkflowEngine::registerTrigger('model.created', ModelCreatedTrigger::class);
     WorkflowEngine::registerAction('change_field', ChangeFieldAction::class);
+    WorkflowEngine::registerModelFields(TestModel::class, ['name' => 'Name']);
 });
 
 it('follows YES path when condition matches', function (): void {
